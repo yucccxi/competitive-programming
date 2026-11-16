@@ -6,12 +6,14 @@ using ll = long long;
 
 const int MAXN  = 2e5 + 5;
 const int MAXLG = 20;
-
-const int MAXV = 1e6 + 5;
+const int MAXV  = 1e6 + 5;
+const int MAXP  = 1e5 + 5;
 
 struct Q { int val, u, v; };
 
-int n, c;
+int n;
+int a[MAXN];
+
 Q all[MAXN];
 
 vector<int> G[MAXN];
@@ -19,11 +21,15 @@ vector<int> G[MAXN];
 vector<int> euler(1);
 int fstSeen[MAXN];
 
-int tsp, tin[MAXN], tout[MAXN], depth[MAXN], st[MAXN << 1][MAXLG];
+int tsp, parent[MAXN], tin[MAXN], tout[MAXN], depth[MAXN], st[MAXN << 1][MAXLG];
 
-map<int, vector<pair<int, int>>> seen;
+vector<int> primes(1);
+int spf[MAXV], pid[MAXV];
 
-int spf[MAXV];
+vector<pair<int, int>> fac[MAXV];
+
+vector<int> fenwick[MAXP];
+vector<int> coords[MAXP];
 
 void sieve() {
     for (int i = 1; i < MAXV; i++) {
@@ -39,9 +45,31 @@ void sieve() {
             }
         }
     }
+
+    for (int i = 2; i < MAXV; i++) {
+        if (spf[i] == i) {
+            pid[i] = primes.size();
+            primes.push_back(i);
+        }
+    }
+
+    for (int i = 2; i < MAXV; i++) {
+        int val = i;
+        while (val > 1) {
+            int p = spf[val];
+            int cnt = 0;
+            while (val % p == 0) {
+                val /= p;
+                ++cnt;
+            }
+            fac[i].push_back({p, cnt});
+        }
+    }
 }
 
 void dfs(int u, int p) {
+    parent[u] = p;
+
     if (fstSeen[u] == 0) {
         fstSeen[u] = euler.size();
     }
@@ -78,21 +106,39 @@ int lca(int u, int v) {
     int l = fstSeen[u], r = fstSeen[v];
     if (l > r) swap(l, r);
     int len = 31 - __builtin_clz(r - l + 1);
-    int lv = st[l][len], rv = st[l - (1 << len) + 1][len];
+    int lv = st[l][len], rv = st[r - (1 << len) + 1][len];
     return depth[lv] < depth[rv] ? lv : rv;
 }
 
-pair<int, int> count(int val, int p) {
-    int cnt = 0;
-    while (val % p == 0) {
-        val /= p;
-        ++cnt;
+int lowbit(int x) { return x & -x; }
+
+// tsp
+int fwQuery(int p, int t) {
+    int pos = upper_bound(coords[p].begin(), coords[p].end(), t) - coords[p].begin();
+    int ans = 0;
+    for (; pos > 0; pos -= lowbit(pos)) {
+        ans += fenwick[p][pos];
     }
-    return {cnt, val};
+    return ans;
+}
+
+void fwUpdate(int p, int t, int delta) {
+    int pos = upper_bound(coords[p].begin(), coords[p].end(), t) - coords[p].begin();
+    int m = fenwick[p].size();
+
+    if (pos == 0) return;
+
+    for (; pos < m; pos += lowbit(pos)) {
+        fenwick[p][pos] += delta;
+    }
 }
 
 void solve() {
-    cin >> n >> c;
+    cin >> n >> a[1];
+
+    all[1].val = a[1];
+    all[1].u = 1;
+    all[1].v = 1;
     for (int i = 2; i <= n; i++) {
         int val, u, v;
         cin >> val >> u >> v;
@@ -101,43 +147,55 @@ void solve() {
 
         G[v].push_back(i);
         G[i].push_back(v);
-    }
 
-    int nc = c;
-    while (nc > 1) {
-        int p = spf[nc];
-        auto [cnt, nval] = count(nc, p);
-        nc = nval;
-        seen[p].push_back({1, cnt});
+        a[i] = val;
     }
 
     dfs(1, 0);
     initST();
 
-    for (int i = 2; i <= n; i++) {
+    for (int i = 1; i <= n; i++) {
         int val = all[i].val, u = all[i].u, v = all[i].v;
-        while (val > 1) {
-            int p = spf[val];
-            auto [cnt, nval] = count(val, p);
 
-            // {u, p}
-            vector<pair<int, int>> &coords = seen[p];
-            sort(coords.begin(), coords.end());
+        int L = lca(u, v);
 
-            vector<int> tree(coords.size() + 1);
-
-            auto rk = [&]()
-
-            val = nval;
-        }
-
-        while (val > 1) {
-            int p = spf[val];
-            auto [cnt, nval] = count(val, p);
-            val = nval;
-            seen[p].push_back({i, cnt});
+        for (auto &[p, c] : fac[val]) {
+            coords[pid[p]].push_back(tin[i]);
+            coords[pid[p]].push_back(tout[i] + 1);
+            coords[pid[p]].push_back(tin[L]);
+            coords[pid[p]].push_back(tin[parent[L]]);
         }
     }
+
+    for (int i = 1; i < MAXP; i++) {
+        sort(coords[i].begin(), coords[i].end());
+        coords[i].erase(unique(coords[i].begin(), coords[i].end()), coords[i].end());
+        fenwick[i].resize(coords[i].size() + 1);
+    }
+
+    for (auto &[p, c] : fac[a[1]]) {
+        fwUpdate(pid[p], tin[1], c);
+        fwUpdate(pid[p], tout[1] + 1, -c);
+    }
+
+    for (int i = 2; i <= n; i++) {
+        int val = all[i].val, u = all[i].u, v = all[i].v;
+        int L = lca(u, v);
+        int nval = 1;
+        for (auto &[p, c] : fac[val]) {
+            int S = fwQuery(pid[p], tin[u]) + fwQuery(pid[p], tin[v]) - fwQuery(pid[p], tin[L]) - fwQuery(pid[p], tin[parent[L]]);
+            int D = max(0, c - S);
+            for (int j = 0; j < D; j++) nval *= p;
+            fwUpdate(pid[p], tin[i], D);
+            fwUpdate(pid[p], tout[i] + 1, -D);
+        }
+        a[i] = nval;
+    }
+
+    for (int i = 1; i <= n; i++) {
+        cout << a[i] << " ";
+    }
+    cout << endl;
 }
 
 signed main() {
