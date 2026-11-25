@@ -157,13 +157,9 @@ void solve() {
     for (int i = 1; i <= n; i++) {
         int val = all[i].val, u = all[i].u, v = all[i].v;
 
-        int L = lca(u, v);
-
         for (auto &[p, c] : fac[val]) {
             coords[pid[p]].push_back(tin[i]);
             coords[pid[p]].push_back(tout[i] + 1);
-            coords[pid[p]].push_back(tin[L]);
-            coords[pid[p]].push_back(tin[parent[L]]);
         }
     }
 
